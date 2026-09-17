@@ -1,0 +1,137 @@
+"""Streamlit chat UI for MedFlow AI.
+
+Run:  streamlit run src/medflow/app.py
+"""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+# Allow `streamlit run src/medflow/app.py` to import the package.
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import streamlit as st  # noqa: E402
+
+from src.medflow.config import settings  # noqa: E402
+
+st.set_page_config(page_title="MedFlow AI", page_icon="🏥", layout="wide")
+
+EXAMPLES = [
+    "Which units had the highest average occupancy last winter, and what capacity tier is that?",
+    "What was the ED left-without-being-seen rate by month in 2024?",
+    "Which diagnosis groups drive the most 30-day readmissions, and what's our reduction bundle?",
+    "How often was the ICU night shift understaffed versus our ratio policy?",
+    "Given today's environmental signal, should we expect a respiratory surge, and what should we do?",
+    "What's the median door-to-provider time for ESI 2 patients, and what's the target?",
+]
+
+
+def _preflight() -> list[str]:
+    problems = []
+    if not settings.db_file.exists():
+        problems.append(
+            f"Database not found at `{settings.db_path}`. Run `make bootstrap`."
+        )
+    if not settings.chroma_path.exists():
+        problems.append(
+            f"Vector index not found at `{settings.chroma_dir}`. Run `make bootstrap`."
+        )
+    if not settings.has_llm:
+        problems.append(
+            "No LLM configured. Set `OPENAI_API_KEY` (and optionally `LLM_BASE_URL`) "
+            "in `.env` to enable the assistant."
+        )
+    return problems
+
+
+@st.cache_resource(show_spinner="Starting MedFlow agent…")
+def _get_agent():
+    from src.medflow.agent import build_agent
+
+    return build_agent()
+
+
+def main() -> None:
+    st.title("🏥 MedFlow AI — Patient-Flow Operations Assistant")
+    st.caption(
+        "Ask about occupancy, ED throughput, staffing, and readmissions. "
+        "Answers combine the operational database, hospital protocols, and a live "
+        "environmental signal."
+    )
+
+    with st.sidebar:
+        st.header("Status")
+        st.write(f"**LLM model:** `{settings.llm_model}`")
+        st.write(f"**Embeddings:** `{settings.embeddings_provider}`")
+        st.write("**LLM key set:** " + ("✅" if settings.has_llm else "❌"))
+        st.write("**Database:** " + ("✅" if settings.db_file.exists() else "❌"))
+        st.write("**Vector index:** " + ("✅" if settings.chroma_path.exists() else "❌"))
+        st.divider()
+        st.header("Try asking")
+        for q in EXAMPLES:
+            if st.button(q, use_container_width=True):
+                st.session_state["pending"] = q
+        st.divider()
+        if st.button("🗑️ Clear conversation", use_container_width=True):
+            st.session_state["messages"] = []
+            st.rerun()
+
+    problems = _preflight()
+    if problems:
+        st.warning("Setup needed before you can chat:")
+        for p in problems:
+            st.markdown(f"- {p}")
+        st.stop()
+
+    if "messages" not in st.session_state:
+        st.session_state["messages"] = []  # list of {role, content, trace}
+
+    # Replay history
+    for m in st.session_state["messages"]:
+        with st.chat_message(m["role"]):
+            st.markdown(m["content"])
+            if m.get("trace"):
+                _render_trace(m["trace"])
+
+    prompt = st.chat_input("Ask a patient-flow question…")
+    if not prompt and "pending" in st.session_state:
+        prompt = st.session_state.pop("pending")
+
+    if prompt:
+        st.session_state["messages"].append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking…"):
+                from src.medflow.agent import run_agent
+
+                try:
+                    result = run_agent(prompt, agent=_get_agent())
+                    answer, trace = result["answer"], result["trace"]
+                except Exception as e:  # noqa: BLE001
+                    answer, trace = f"⚠️ Error: {e}", []
+            st.markdown(answer)
+            _render_trace(trace)
+
+        st.session_state["messages"].append(
+            {"role": "assistant", "content": answer, "trace": trace}
+        )
+
+
+def _render_trace(trace: list[dict]) -> None:
+    if not trace:
+        return
+    with st.expander(f"🔧 Tools used ({len(trace)})"):
+        for i, step in enumerate(trace, 1):
+            st.markdown(f"**{i}. `{step['tool']}`**")
+            if step.get("input"):
+                st.code(str(step["input"]), language="json")
+            out = step.get("output", "")
+            st.markdown(out if len(out) < 1500 else out[:1500] + " …")
+
+
+if __name__ == "__main__":
+    main()

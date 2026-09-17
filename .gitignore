@@ -1,0 +1,23 @@
+# Environment
+.env
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Generated data / indexes (rebuilt via `make bootstrap`)
+data/*.db
+data/chroma/
+data/*.sqlite
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
