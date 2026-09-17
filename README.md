@@ -36,25 +36,25 @@ and elective-admission holds apply."*
 
 ```
                          ┌──────────────────────────────┐
-                         │        Streamlit UI           │  presentation
-                         │   chat + tool-trace viewer    │
-                         └───────────────┬───────────────┘
+                         │        Streamlit UI          │  presentation
+                         │   chat + tool-trace viewer   │
+                         └───────────────┬──────────────┘
                                          │
                          ┌───────────────▼───────────────┐
-                         │      LangGraph ReAct Agent      │ orchestration
-                         │  (LLM plans → calls tools →     │
-                         │   reasons → answers, cites)     │
-                         └───┬───────────┬───────────┬────┘
+                         │      LangGraph ReAct Agent    │ orchestration
+                         │  (LLM plans → calls tools →   │
+                         │   reasons → answers, cites)   │
+                         └───┬───────────┬───────────────┘
                              │           │           │
               ┌──────────────▼──┐  ┌─────▼──────┐  ┌─▼────────────────┐
-              │ query_hospital_ │  │  search_    │  │ get_environmental │  tools
-              │ db (text-to-SQL)│  │  protocols  │  │ _signal           │
+              │ query_hospital_ │  │  search_   │  │ get_environmental│  tools
+              │ db (text-to-SQL)│  │  protocols │  │ _signal          │
               └────────┬────────┘  └─────┬──────┘  └────────┬─────────┘
                        │                 │                  │
              ┌─────────▼────────┐ ┌──────▼───────┐   ┌──────▼───────┐
-             │ SQLite (RO conn, │ │  Chroma       │   │ Open-Meteo    │  data
-             │ de-id v_* views) │ │  (protocol    │   │ (+ offline    │
-             │  64k+ records    │ │   embeddings) │   │  fallback)    │
+             │ SQLite (RO conn, │ │  Chroma      │   │ Open-Meteo   │  data
+             │ de-id v_* views) │ │  (protocol   │   │ (+ offline   │
+             │  64k+ records    │ │   embeddings)│   │  fallback)   │
              └──────────────────┘ └──────────────┘   └──────────────┘
 ```
 
