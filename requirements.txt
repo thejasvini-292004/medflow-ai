@@ -5,12 +5,9 @@ langchain-openai>=0.2.0
 langgraph>=0.2.40
 
 # --- Vector store + embeddings ---
-chromadb>=0.5.0
-langchain-chroma>=0.1.4
-# Chroma needs sqlite3 >= 3.35; some hosts (Streamlit Cloud) ship an older one.
-# Installed only on Linux hosts; app.py swaps it in for the stdlib sqlite3.
-# (No macOS/Windows wheel, and not needed there, so it's Linux-scoped.)
-pysqlite3-binary>=0.5.0; sys_platform == "linux"
+# The protocol index uses LangChain's built-in InMemoryVectorStore (ships with
+# langchain-core), so there's no chromadb / native / sqlite3 dependency — this
+# keeps memory low and deploys cleanly on constrained hosts (Streamlit Cloud).
 # Optional local embeddings (uncomment if you want offline HF embeddings):
 # sentence-transformers>=3.0.0
 # langchain-huggingface>=0.1.0

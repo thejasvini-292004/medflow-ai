@@ -1,21 +1,25 @@
-"""Chunk the protocol documents and build a persistent Chroma vector index.
+"""Chunk the protocol documents and build a lightweight, persistent vector index.
+
+Uses LangChain's dependency-free ``InMemoryVectorStore`` (pure Python, persisted
+to a small JSON file). For a corpus this size (a handful of SOPs, ~25 chunks)
+this is faster to load, uses a fraction of the memory, and needs no native
+libraries or a modern system ``sqlite3`` — which makes it deploy cleanly on
+constrained hosts like Streamlit Community Cloud.
 
 Run with:  python -m src.medflow.knowledge.build_index
 """
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
-from langchain_chroma import Chroma
 from langchain_core.documents import Document
+from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 
 from ..config import settings
 from ..embeddings import get_embeddings
 
 PROTOCOLS_DIR = Path(__file__).with_name("protocols")
-COLLECTION = "protocols"
 
 _HEADERS = [("#", "policy"), ("##", "section")]
 
@@ -35,39 +39,29 @@ def load_chunks() -> list[Document]:
     return docs
 
 
-def build(persist_dir: Path | None = None) -> int:
-    persist_dir = persist_dir or settings.chroma_path
-    if persist_dir.exists():
-        shutil.rmtree(persist_dir)
-    persist_dir.mkdir(parents=True, exist_ok=True)
+def build(index_file: Path | None = None) -> int:
+    index_file = index_file or settings.index_file
+    index_file.parent.mkdir(parents=True, exist_ok=True)
 
     chunks = load_chunks()
-    Chroma.from_documents(
-        documents=chunks,
-        embedding=get_embeddings(),
-        collection_name=COLLECTION,
-        persist_directory=str(persist_dir),
-    )
+    store = InMemoryVectorStore(embedding=get_embeddings())
+    store.add_documents(chunks)
+    store.dump(str(index_file))
     print(
         f"Indexed {len(chunks)} chunks from {len(list(PROTOCOLS_DIR.glob('*.md')))} "
-        f"protocols into {persist_dir} "
-        f"(provider={settings.embeddings_provider})."
+        f"protocols into {index_file} (provider={settings.embeddings_provider})."
     )
     return len(chunks)
 
 
-def get_vectorstore(persist_dir: Path | None = None) -> Chroma:
-    persist_dir = persist_dir or settings.chroma_path
-    if not persist_dir.exists():
+def get_vectorstore(index_file: Path | None = None) -> InMemoryVectorStore:
+    index_file = index_file or settings.index_file
+    if not index_file.exists():
         raise FileNotFoundError(
-            f"Vector index not found at {persist_dir}. Run `make index` "
+            f"Vector index not found at {index_file}. Run `make index` "
             "(or `python -m src.medflow.knowledge.build_index`) first."
         )
-    return Chroma(
-        collection_name=COLLECTION,
-        embedding_function=get_embeddings(),
-        persist_directory=str(persist_dir),
-    )
+    return InMemoryVectorStore.load(str(index_file), get_embeddings())
 
 
 if __name__ == "__main__":

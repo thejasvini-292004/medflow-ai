@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     # --- Paths (resolved relative to repo root if not absolute) ---
     db_path: str = "data/medflow.db"
-    chroma_dir: str = "data/chroma"
+    index_path: str = "data/protocol_index.json"
 
     # --- External signal tool ---
     signal_lat: float = 34.0522
@@ -43,8 +43,8 @@ class Settings(BaseSettings):
         return p if p.is_absolute() else ROOT_DIR / p
 
     @property
-    def chroma_path(self) -> Path:
-        p = Path(self.chroma_dir)
+    def index_file(self) -> Path:
+        p = Path(self.index_path)
         return p if p.is_absolute() else ROOT_DIR / p
 
     @property

@@ -38,5 +38,5 @@ docker-run:
 	docker run --rm -p 8501:8501 --env-file .env medflow-ai:latest
 
 clean:
-	rm -rf data/medflow.db data/chroma __pycache__ .pytest_cache
+	rm -rf data/medflow.db data/protocol_index.json __pycache__ .pytest_cache
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

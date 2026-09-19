@@ -89,7 +89,10 @@ infection-control / respiratory-surge rules. Crucially, they contain **specific 
 into an operational judgment.
 
 `build_index.py` chunks these on markdown headers, then into ~800-character overlapping
-windows, embeds them, and persists them to a **Chroma** vector store. `rag_tool.py` exposes a
+windows, embeds them, and persists them to a lightweight, in-process vector store
+(LangChain's dependency-free `InMemoryVectorStore`, saved as a small JSON file — no ChromaDB,
+no native libraries, and no system-`sqlite3` requirement, which is what lets it deploy cleanly
+on constrained hosts like Streamlit Community Cloud). `rag_tool.py` exposes a
 retriever the agent calls to fetch the relevant policy excerpts *with their source document*,
 so answers can cite `OPS-BED-001` rather than hallucinate a threshold.
 
@@ -192,7 +195,7 @@ agent runs, and a human-review step before any operational action.
 | Domain | Supply-chain / cold-chain ops | Hospital patient flow |
 | Structured DB | MSSQL Server 2022 | SQLite (portable, zero-setup) |
 | Text-to-SQL | LangChain SQL agent | LangGraph ReAct + guarded SQL tool |
-| Vector DB / RAG | Pinecone (compliance docs) | Chroma (hospital protocols) |
+| Vector DB / RAG | Pinecone (compliance docs) | In-process vector store (hospital protocols) |
 | Embeddings | OpenAI | Factory: openai / hf / offline-hashing |
 | External tool | Weather API | Open-Meteo + respiratory-surge proxy (with fallback) |
 | Security | Read-only DB user + views | Read-only conn + de-identified views + SQL guard |

@@ -23,7 +23,7 @@ MedFlow AI is a **LangGraph ReAct agent** with three tools:
 | Tool | What it does | Backed by |
 |------|--------------|-----------|
 | `query_hospital_db` | Writes & runs read-only SQL to get the actual numbers (occupancy, ED wait times, staffing, readmissions) | SQLite + de-identified views |
-| `search_protocols` | Retrieves the hospital's policies/SOPs to interpret those numbers against thresholds | Chroma vector store (RAG) |
+| `search_protocols` | Retrieves the hospital's policies/SOPs to interpret those numbers against thresholds | In-process vector store (RAG) |
 | `get_environmental_signal` | Pulls current weather + a respiratory-surge proxy for capacity planning | Open-Meteo API (+ offline fallback) |
 
 The agent decides which tools to use per question and combines them — e.g. *"MED ran at 101%
@@ -36,25 +36,25 @@ and elective-admission holds apply."*
 
 ```
                          ┌──────────────────────────────┐
-                         │        Streamlit UI          │  presentation
-                         │   chat + tool-trace viewer   │
-                         └───────────────┬──────────────┘
+                         │        Streamlit UI           │  presentation
+                         │   chat + tool-trace viewer    │
+                         └───────────────┬───────────────┘
                                          │
                          ┌───────────────▼───────────────┐
-                         │      LangGraph ReAct Agent    │ orchestration
-                         │  (LLM plans → calls tools →   │
-                         │   reasons → answers, cites)   │
-                         └───┬───────────┬───────────────┘
+                         │      LangGraph ReAct Agent      │ orchestration
+                         │  (LLM plans → calls tools →     │
+                         │   reasons → answers, cites)     │
+                         └───┬───────────┬───────────┬────┘
                              │           │           │
               ┌──────────────▼──┐  ┌─────▼──────┐  ┌─▼────────────────┐
-              │ query_hospital_ │  │  search_   │  │ get_environmental│  tools
-              │ db (text-to-SQL)│  │  protocols │  │ _signal          │
+              │ query_hospital_ │  │  search_    │  │ get_environmental │  tools
+              │ db (text-to-SQL)│  │  protocols  │  │ _signal           │
               └────────┬────────┘  └─────┬──────┘  └────────┬─────────┘
                        │                 │                  │
              ┌─────────▼────────┐ ┌──────▼───────┐   ┌──────▼───────┐
-             │ SQLite (RO conn, │ │  Chroma      │   │ Open-Meteo   │  data
-             │ de-id v_* views) │ │  (protocol   │   │ (+ offline   │
-             │  64k+ records    │ │   embeddings)│   │  fallback)   │
+             │ SQLite (RO conn, │ │ In-process    │   │ Open-Meteo    │  data
+             │ de-id v_* views) │ │  (protocol    │   │ (+ offline    │
+             │  64k+ records    │ │   embeddings) │   │  fallback)    │
              └──────────────────┘ └──────────────┘   └──────────────┘
 ```
 
@@ -111,10 +111,12 @@ make docker-run         # serves on http://localhost:8501, reads .env
 5. Deploy. The app builds its database + protocol index automatically on first run, so
    there's nothing else to set up.
 
-Notes: the `data/` folder is intentionally not in git — the app regenerates it on startup.
-`pysqlite3-binary` (in `requirements.txt`, Linux-only) plus a shim at the top of `app.py`
-give Chroma a new-enough `sqlite3` on the hosted platform. If the page ever comes up blank,
-it's almost always that shim/sqlite issue — check the app logs from the **Manage app** menu.
+Notes: the app builds its data on startup (the `data/` folder isn't in git), and the RAG
+index uses LangChain's in-process `InMemoryVectorStore` — no ChromaDB, no native libraries,
+and no system-`sqlite3` requirement — so it stays well within the free tier's memory. Either
+`streamlit_app.py` (repo root, the platform default) or `src/medflow/app.py` works as the
+Main file path. If the page ever comes up blank, open the app logs from the **Manage app**
+menu (bottom-right) — that shows the exact cause.
 
 ---
 
@@ -165,7 +167,7 @@ medflow-ai/
 │   │   └── connection.py      # read-only connection + SQL safety guard
 │   ├── knowledge/
 │   │   ├── protocols/*.md      # the hospital's SOPs (RAG corpus)
-│   │   └── build_index.py     # chunk + embed -> Chroma
+│   │   └── build_index.py     # chunk + embed -> in-process vector store (JSON)
 │   └── tools/
 │       ├── sql_tool.py        # text-to-SQL tool
 │       ├── rag_tool.py        # protocol retrieval tool
@@ -185,7 +187,7 @@ deployed to **AWS EC2**. MedFlow keeps the same *shape* (SQL agent + RAG + exter
 Streamlit + Docker + CI) but is a distinct build:
 
 - **Domain:** hospital patient flow, with its own schema, protocols, and metrics.
-- **Stack:** SQLite + Chroma so it runs anywhere with zero cloud setup.
+- **Stack:** SQLite + an in-process vector store so it runs anywhere with zero cloud setup.
 - **Portability:** provider-agnostic LLM/embeddings, incl. a fully offline mode.
 - **Security angle:** HIPAA-style de-identification via read-only views, not just RO creds.
 - **Resilience:** the external tool degrades gracefully to a deterministic fallback.

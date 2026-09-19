@@ -8,17 +8,6 @@ import os
 import sys
 from pathlib import Path
 
-# --- Hosted-deployment fix (Streamlit Community Cloud, etc.) ------------------
-# Chroma requires sqlite3 >= 3.35, but some hosts ship an older system sqlite3,
-# which makes the app crash on import (a blank page). If pysqlite3 is installed
-# (it is, on Linux, via requirements.txt) swap it in as the stdlib `sqlite3`
-# BEFORE anything imports chromadb. This is a safe no-op locally on macOS.
-try:
-    __import__("pysqlite3")
-    sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
-except Exception:  # noqa: BLE001
-    pass
-
 # Allow `streamlit run src/medflow/app.py` to import the package.
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -61,7 +50,7 @@ def _ensure_assets() -> bool:
 
     if not settings.db_file.exists():
         build_db()
-    if not settings.chroma_path.exists():
+    if not settings.index_file.exists():
         build_index()
     return True
 
@@ -94,7 +83,7 @@ def main() -> None:
         st.write(f"**Embeddings:** `{settings.embeddings_provider}`")
         st.write("**LLM key set:** " + ("✅" if settings.has_llm else "❌"))
         st.write("**Database:** " + ("✅" if settings.db_file.exists() else "❌"))
-        st.write("**Vector index:** " + ("✅" if settings.chroma_path.exists() else "❌"))
+        st.write("**Vector index:** " + ("✅" if settings.index_file.exists() else "❌"))
         st.divider()
         st.header("Try asking")
         for q in EXAMPLES:

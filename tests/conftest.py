@@ -24,6 +24,6 @@ def built_db(tmp_path_factory) -> Path:
 def built_index(tmp_path_factory) -> Path:
     from src.medflow.knowledge.build_index import build
 
-    idx = tmp_path_factory.mktemp("chroma")
+    idx = tmp_path_factory.mktemp("index") / "protocol_index.json"
     build(idx)
     return idx
