@@ -4,8 +4,20 @@ Run:  streamlit run src/medflow/app.py
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
+
+# --- Hosted-deployment fix (Streamlit Community Cloud, etc.) ------------------
+# Chroma requires sqlite3 >= 3.35, but some hosts ship an older system sqlite3,
+# which makes the app crash on import (a blank page). If pysqlite3 is installed
+# (it is, on Linux, via requirements.txt) swap it in as the stdlib `sqlite3`
+# BEFORE anything imports chromadb. This is a safe no-op locally on macOS.
+try:
+    __import__("pysqlite3")
+    sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+except Exception:  # noqa: BLE001
+    pass
 
 # Allow `streamlit run src/medflow/app.py` to import the package.
 ROOT = Path(__file__).resolve().parents[2]
@@ -13,6 +25,14 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import streamlit as st  # noqa: E402
+
+# Bridge Streamlit "Secrets" (Cloud) into os.environ so pydantic settings read
+# them the same way as a local .env. Safe if no secrets are defined.
+try:
+    for _k, _v in st.secrets.items():
+        os.environ.setdefault(_k, str(_v))
+except Exception:  # noqa: BLE001
+    pass
 
 from src.medflow.config import settings  # noqa: E402
 
@@ -28,22 +48,22 @@ EXAMPLES = [
 ]
 
 
-def _preflight() -> list[str]:
-    problems = []
+@st.cache_resource(show_spinner="Preparing hospital data + protocol index (first run only)…")
+def _ensure_assets() -> bool:
+    """Build the DB and vector index if they're missing.
+
+    On a fresh host (e.g. Streamlit Community Cloud) the generated `data/` folder
+    isn't in git, so we build it once on startup instead of requiring a manual
+    `make bootstrap`. Cached so it runs a single time per container.
+    """
+    from src.medflow.db.generate_data import build as build_db
+    from src.medflow.knowledge.build_index import build as build_index
+
     if not settings.db_file.exists():
-        problems.append(
-            f"Database not found at `{settings.db_path}`. Run `make bootstrap`."
-        )
+        build_db()
     if not settings.chroma_path.exists():
-        problems.append(
-            f"Vector index not found at `{settings.chroma_dir}`. Run `make bootstrap`."
-        )
-    if not settings.has_llm:
-        problems.append(
-            "No LLM configured. Set `OPENAI_API_KEY` (and optionally `LLM_BASE_URL`) "
-            "in `.env` to enable the assistant."
-        )
-    return problems
+        build_index()
+    return True
 
 
 @st.cache_resource(show_spinner="Starting MedFlow agent…")
@@ -60,6 +80,13 @@ def main() -> None:
         "Answers combine the operational database, hospital protocols, and a live "
         "environmental signal."
     )
+
+    # Build the DB + index on first run if they're missing (fresh host).
+    try:
+        _ensure_assets()
+    except Exception as e:  # noqa: BLE001
+        st.error(f"Could not build the data/index on startup: {e}")
+        st.stop()
 
     with st.sidebar:
         st.header("Status")
@@ -78,11 +105,14 @@ def main() -> None:
             st.session_state["messages"] = []
             st.rerun()
 
-    problems = _preflight()
-    if problems:
-        st.warning("Setup needed before you can chat:")
-        for p in problems:
-            st.markdown(f"- {p}")
+    if not settings.has_llm:
+        st.warning(
+            "**No language model configured.** The data and protocol tools are ready, "
+            "but answering questions needs an LLM.\n\n"
+            "- **On Streamlit Community Cloud:** open the app's **⋮ → Settings → Secrets** "
+            "and add `OPENAI_API_KEY = \"sk-...\"` (Ollama can't run on the hosted platform).\n"
+            "- **Locally:** set `OPENAI_API_KEY`, or `LLM_BASE_URL` for a local model, in `.env`."
+        )
         st.stop()
 
     if "messages" not in st.session_state:
