@@ -95,31 +95,6 @@ make docker-run         # serves on http://localhost:8501, reads .env
 # or: docker compose up --build
 ```
 
-### Deploy to Streamlit Community Cloud
-
-1. Push the repo to GitHub (already done if you're reading this there).
-2. On [share.streamlit.io](https://share.streamlit.io) → **Create app** → pick your repo/branch.
-3. Set **Main file path** to `src/medflow/app.py`.
-4. Open **Advanced settings → Secrets** and add your model key (Ollama can't run on the
-   hosted platform, so use a hosted LLM here):
-
-   ```toml
-   OPENAI_API_KEY = "sk-..."
-   LLM_MODEL = "gpt-4o-mini"
-   EMBEDDINGS_PROVIDER = "hashing"
-   ```
-5. Deploy. The app builds its database + protocol index automatically on first run, so
-   there's nothing else to set up.
-
-Notes: the app builds its data on startup (the `data/` folder isn't in git), and the RAG
-index uses LangChain's in-process `InMemoryVectorStore` — no ChromaDB, no native libraries,
-and no system-`sqlite3` requirement — so it stays well within the free tier's memory. Either
-`streamlit_app.py` (repo root, the platform default) or `src/medflow/app.py` works as the
-Main file path. If the page ever comes up blank, open the app logs from the **Manage app**
-menu (bottom-right) — that shows the exact cause.
-
----
-
 ## Configuration
 
 Everything is set via `.env` (see `.env.example`). Highlights:
